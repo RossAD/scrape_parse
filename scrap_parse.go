@@ -1,11 +1,12 @@
 package main
 
 import (
-	// "database/sql"
+	"database/sql"
 	"fmt"
+	"strconv"
 	// "github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
-	// _ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3"
 	// "io/ioutil"
 )
 
@@ -18,6 +19,10 @@ type ResultObj struct {
 }
 
 func main() {
+	database, _ := sql.Open("sqlite3", "./db/craigslist.db")
+	statement, _ := database.Prepare("CREATE TABLE IF NOT EXISTS results (id INTEGER PRIMARY KEY, repost_id INTEGER, title TEXT, url TEXT, price TEXT)")
+	statement.Exec()
+
 	// Instantiate default collector
 	c := colly.NewCollector(
 		// Visit only domains: hackerspaces.org, wiki.hackerspaces.org
@@ -36,14 +41,28 @@ func main() {
 			price := ei.ChildText("span.result-price")
 			result_obj.price = price
 		})
-		fmt.Printf("Post Id Found: %s\n", result_obj.id)
-		fmt.Printf("Post Repost Id Found: %s\n", result_obj.repost_id)
-		fmt.Printf("Post Title Found: %s\n", result_obj.title)
-		fmt.Printf("Post url: %s\n", result_obj.url)
-		fmt.Printf("Post price: %s\n", result_obj.price)
-		// Visit link found on page
-		// Only those links are visited which are in AllowedDomains
-		// c.Visit(e.Request.AbsoluteURL(link))
+		// fmt.Printf("Post Id Found: %s\n", result_obj.id)
+		// fmt.Printf("Post Repost Id Found: %s\n", result_obj.repost_id)
+		// fmt.Printf("Post Title Found: %s\n", result_obj.title)
+		// fmt.Printf("Post url: %s\n", result_obj.url)
+		// fmt.Printf("Post price: %s\n", result_obj.price)
+		row := database.QueryRow(fmt.Sprintf("SELECT * FROM results where id=%s", result_obj.id))
+		var id int
+		row.Scan(&id)
+		fmt.Printf("Found Id: %s\n", strconv.Itoa(id))
+		if len(strconv.Itoa(id)) == 0 {
+			fmt.Printf("New Record Insert!!!!!!!!")
+			statement, _ := database.Prepare(`INSERT INTO results (id, repost_id, title, url, price)
+			   VALUES (?, ?, ?, ? ,?)`)
+			statement.Exec(result_obj.id, result_obj.repost_id, result_obj.title, result_obj.url, result_obj.price)
+		}
+		// rows, _ := database.Query("SELECT id, title, price FROM results")
+		// var title string
+		// var price string
+		// for rows.Next() {
+		// 	rows.Scan(&id, &title, &price)
+		// 	fmt.Println(strconv.Itoa(id) + ": " + title + "\nPrice: " + price)
+		// }
 	})
 
 	// Before making a request print "Visiting ..."
