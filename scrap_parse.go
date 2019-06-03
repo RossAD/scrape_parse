@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"time"
 	// "strconv"
@@ -17,14 +18,22 @@ type ResultObj struct {
 	title       string
 	url         string
 	price       string
+	housing     string
+	hood        string
 	posted_time time.Time
 }
 
 func main() {
+	postal := flag.Int("postal", 94118, "Zip Code of search area")
+	distance := flag.Int("distance", 3, "Search radius away from zip code")
+	min_price := flag.Int("min_price", 1000, "Min price to search for")
+	max_price := flag.Int("max_price", 2500, "Max price to search for")
+
 	database, _ := sql.Open("sqlite3", "./db/craigslist.db")
 	statement, _ := database.Prepare(`CREATE TABLE IF NOT EXISTS results 
 					(id INTEGER PRIMARY KEY, repost_id INTEGER, 
-					title TEXT, url TEXT, price TEXT, posted_time DATETIME,
+					title TEXT, url TEXT, price TEXT, housing TEXT, 
+					hood TEXT, posted_time DATETIME,
 					mod_time DATETIME DEFAULT CURRENT_TIMESTAMP)`)
 	statement.Exec()
 
@@ -51,18 +60,23 @@ func main() {
 			url:         e.ChildAttr("a.result-title", "href"),
 			posted_time: post_time,
 		}
-		e.ForEach("a.result-image", func(_ int, ei *colly.HTMLElement) {
+		e.ForEach("span.result-meta", func(_ int, ei *colly.HTMLElement) {
 			price := ei.ChildText("span.result-price")
+			housing := ei.ChildText("span.housing")
+			hood := ei.ChildText("span.result-hood")
 			result_obj.price = price
+			result_obj.housing = housing
+			result_obj.hood = hood
 		})
 		row := database.QueryRow(fmt.Sprintf("SELECT id FROM results where id='%s'", result_obj.id))
 		var id string
 		row.Scan(&id)
 		if (id != result_obj.id) && (id != result_obj.repost_id) {
 			fmt.Printf("New Record Insert!!!!!!!!\n")
-			statement, _ := database.Prepare(`INSERT INTO results (id, repost_id, title, url, price, posted_time)
-			   VALUES (?, ?, ?, ? ,?, ?)`)
-			statement.Exec(result_obj.id, result_obj.repost_id, result_obj.title, result_obj.url, result_obj.price, result_obj.posted_time)
+			statement, _ := database.Prepare(`INSERT INTO results (id, repost_id, title, url, price, posted_time, housing, hood)
+			   VALUES (?, ?, ?, ? ,?, ?, ?, ?)`)
+			statement.Exec(result_obj.id, result_obj.repost_id, result_obj.title, result_obj.url,
+				result_obj.price, result_obj.posted_time, result_obj.housing, result_obj.hood)
 		}
 		rows, _ := database.Query("SELECT id, title, price FROM results")
 		var title string
@@ -79,6 +93,6 @@ func main() {
 	})
 
 	// Start scraping on https://hackerspaces.org
-	c.Visit("https://sfbay.craigslist.org/search/apa?search_distance=3&postal=94118&max_price=2000&availabilityMode=0&sale_date=all+dates")
+	c.Visit("https://sfbay.craigslist.org/search/nby/apa?search_distance=5&postal=94941&max_price=2500&availabilityMode=0&sale_date=all+date")
 
 }
