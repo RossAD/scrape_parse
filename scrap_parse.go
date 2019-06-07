@@ -26,9 +26,13 @@ type ResultObj struct {
 func main() {
 	postal := flag.Int("postal", 94118, "Zip Code of search area")
 	distance := flag.Int("distance", 3, "Search radius away from zip code")
-	min_price := flag.Int("min_price", 1000, "Min price to search for")
+	// min_price := flag.Int("min_price", 1000, "Min price to search for")
 	max_price := flag.Int("max_price", 2500, "Max price to search for")
 
+	flag.Parse()
+
+	url_base := "https://sfbay.craigslist.org/search/nby/apa"
+	query_string := fmt.Sprintf("?search_distance=%d&postal=%d&max_price=%d&availabilityMode=0&sale_date=all+date", distance, postal, max_price)
 	database, _ := sql.Open("sqlite3", "./db/craigslist.db")
 	statement, _ := database.Prepare(`CREATE TABLE IF NOT EXISTS results 
 					(id INTEGER PRIMARY KEY, repost_id INTEGER, 
@@ -93,6 +97,6 @@ func main() {
 	})
 
 	// Start scraping on https://hackerspaces.org
-	c.Visit("https://sfbay.craigslist.org/search/nby/apa?search_distance=5&postal=94941&max_price=2500&availabilityMode=0&sale_date=all+date")
+	c.Visit(url_base + query_string)
 
 }
