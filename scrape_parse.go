@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"log"
+	"os"
 	"time"
 	// "strconv"
 	// "github.com/PuerkitoBio/goquery"
@@ -24,23 +26,67 @@ type ResultObj struct {
 	postedTime time.Time
 }
 
+func dbWrite(listing ResultObj) {
+	database, err := sql.Open("sqlite3", "./db/craigslist.db")
+	if err != nil {
+		log.Fatal("Failed to open database", err)
+	}
+	defer database.Close()
+	statement, err := database.Prepare(`CREATE TABLE IF NOT EXISTS results 
+					(id INTEGER PRIMARY KEY, repostId INTEGER, 
+					title TEXT, url TEXT, price TEXT, housing TEXT, 
+					hood TEXT, postedTime DATETIME,
+					mod_time DATETIME DEFAULT CURRENT_TIMESTAMP)`)
+	if err != nil {
+		log.Fatal("Failed to create table ", err)
+	}
+
+	statement.Exec()
+	row := database.QueryRow(fmt.Sprintf("SELECT id FROM results where id='%s'", listing.id))
+	var id string
+	row.Scan(&id)
+	if (id != listing.id) && (id != listing.repostId) {
+		fmt.Printf("New Record Insert!!!!!!!!\n")
+		statement, err := database.Prepare(`INSERT INTO results (id, repostId, title, url, price, postedTime, housing, hood)
+			   VALUES (?, ?, ?, ? ,?, ?, ?, ?)`)
+		if err != nil {
+			log.Fatal("Failed to create insert statement ", err)
+		}
+		result, err := statement.Exec(listing.id, listing.repostId, listing.title, listing.url,
+			listing.price, listing.postedTime, listing.housing, listing.hood)
+		if err != nil {
+			log.Fatal("Failed to insert values ", err)
+		}
+		var count int
+		count = 0
+		if result != nil {
+			count++
+		}
+
+	}
+	rows, _ := database.Query("SELECT id, title, price FROM results")
+	var title string
+	var price string
+	for rows.Next() {
+		rows.Scan(&id, &title, &price)
+	}
+}
+
 func main() {
-	postal := flag.Int("postal", 94118, "Zip Code of search area")
-	distance := flag.Int("distance", 3, "Search radius away from zip code")
+	postal := flag.Int("postal", 94941, "Zip Code of search area")
+	distance := flag.Int("distance", 2, "Search radius away from zip code")
 	// min_price := flag.Int("min_price", 1000, "Min price to search for")
 	maxPrice := flag.Int("max_price", 2500, "Max price to search for")
 
 	flag.Parse()
+	if postal == nil {
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
 
 	urlBase := "https://sfbay.craigslist.org/search/nby/apa"
-	queryString := fmt.Sprintf("?search_distance=%d&postal=%d&max_price=%d&availabilityMode=0&sale_date=all+date", distance, postal, maxPrice)
-	database, _ := sql.Open("sqlite3", "./db/craigslist.db")
-	statement, _ := database.Prepare(`CREATE TABLE IF NOT EXISTS results 
-					(id INTEGER PRIMARY KEY, repostId INTEGER, 
-					title TEXT, url TEXT, price TEXT, housing TEXT, 
-					hood TEXT, posted_time DATETIME,
-					mod_time DATETIME DEFAULT CURRENT_TIMESTAMP)`)
-	statement.Exec()
+	fmt.Printf("%d %d %d\n", *postal, *distance, *maxPrice)
+	queryString := fmt.Sprintf("?search_distance=%d&postal=%d&max_price=%d&availabilityMode=0&sale_date=all+date", *distance, *postal, *maxPrice)
 
 	// Instantiate default collector
 	c := colly.NewCollector(
@@ -50,14 +96,14 @@ func main() {
 
 	// On every a element which has href attribute call callback
 	c.OnHTML("li.result-row", func(e *colly.HTMLElement) {
-		fmt.Printf("Time Stamp: ")
+		// fmt.Printf("Time Stamp: ")
 		postedTime := e.ChildAttr("time.result-date", "datetime")
-		fmt.Printf(postedTime + "\n")
+		// fmt.Printf(postedTime + "\n")
 		shortForm := "2006-01-02 15:04"
 		loc, _ := time.LoadLocation("America/Los_Angeles")
 		postTime, _ := time.ParseInLocation(shortForm, postedTime, loc)
-		fmt.Printf("Posted Time: ")
-		fmt.Println(postTime.In(loc))
+		// fmt.Printf("Posted Time: ")
+		// fmt.Println(postTime.In(loc))
 		resultObj := ResultObj{
 			id:         e.Attr("data-pid"),
 			repostId:   e.Attr("data-repost-of"),
@@ -73,23 +119,7 @@ func main() {
 			resultObj.housing = housing
 			resultObj.hood = hood
 		})
-		row := database.QueryRow(fmt.Sprintf("SELECT id FROM results where id='%s'", resultObj.id))
-		var id string
-		row.Scan(&id)
-		if (id != resultObj.id) && (id != resultObj.repostId) {
-			fmt.Printf("New Record Insert!!!!!!!!\n")
-			statement, _ := database.Prepare(`INSERT INTO results (id, repostId, title, url, price, postedTime, housing, hood)
-			   VALUES (?, ?, ?, ? ,?, ?, ?, ?)`)
-			statement.Exec(resultObj.id, resultObj.repostId, resultObj.title, resultObj.url,
-				resultObj.price, resultObj.postedTime, resultObj.housing, resultObj.hood)
-		}
-		rows, _ := database.Query("SELECT id, title, price FROM results")
-		var title string
-		var price string
-		for rows.Next() {
-			rows.Scan(&id, &title, &price)
-			fmt.Println(id + " : " + title + "\nPrice: " + price)
-		}
+		dbWrite(resultObj)
 	})
 
 	// Before making a request print "Visiting ..."
